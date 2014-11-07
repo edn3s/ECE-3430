@@ -1,0 +1,166 @@
+1. Add to defines/macros section:
+#define SCLK BIT5 // SM clock define for timer
+#define LATCH BIT0 // LATCH (SS/CE) define for LED display
+#define SIN BIT7 // SIN define for LED display
+#define BLANK BIT4 // BLANK define for LED display
+#define BUTTON BIT3 // button set to P1.3
+#define Frequency 800 // defining the 1 mS period for ISR to be called (TACCR0 value)
+// when our clock is calibrated to 8MHz
+// cardinal directions of LEDs set with defines
+#define NW BIT0
+#define W BIT1
+#define SW BIT2
+#define S BIT3
+#define SE BIT4
+#define E BIT5
+#define NE BIT6
+#define N BIT7
+
+2. Add to structures section:
+typedef struct LedStruct {
+	char LedStatus; // mask status
+	int Period; // recommended value is 50
+	int Onticks[8]; // Stores pulse width of LED
+	LEDState state; // identifies which state the program is in
+	int power; // the brightness of the LED
+	int setPWM[8]; // array of LEDs to set PWM for each LED
+} LEDinfo;
+// this structure makes it possible to create a variable that has modifiable variables
+// within it (LedStatus, Period, Onticks[8], state, etc)
+
+3. Add to global variables section:
+LEDInfo ledDisplay;
+
+4. Add to function prototypes:
+void lightLED();
+void sendBitBang(char);
+void InitLED();
+void stop_watchdog(); // stops watchdog timer
+void BlankLow(); // drives BLANK low
+
+5. Within the main method:
+stop_watchdog();
+InitializePins();
+InitTimerSystem();
+InitLED();
+
+6. lightLED() method:
+// lightLED() - light each LED in turn for half a second
+void lightLED(){
+	char leds = 0x80; // starting position set
+	int i = 8; // loop counter
+
+	while(i > 0) {
+		sendBitBang(leds); // passing a byte of data to sendData function
+		// _delay_cycles(); - we should delay by a certain amount (half second?)
+		ledbyte >>= 1; // bit shift to next LED in position
+		i--; // decrement counter till all 8 LEDs are passed
+	}
+}
+
+7. PWM() function:
+// PWM() function - to set pulse widths for each LED by a switch-case statement
+void PWM(int direction) {
+	switch (direction) {
+	// looking at BIT0 (NW)
+	case NW:
+		ledDisplay.setPWM[0] = ledDisplay.power;
+//		// setting values individually for the pulse width for the rest
+//		// of the LEDs when direction is toward NW
+//		ledDisplay.setPWM[1] =
+//		ledDisplay.setPWM[2] =
+//		....
+		break;
+	case W:
+		// for each one following, the LED selected will be the
+		// position in the array set equal to it's power or brightness
+		// ledDisplay.setPWM[0] = #; number for pulse width
+		// ledDisplay.setPWM[1] = ledDisplay.power;
+		// ...
+		break;
+	case SW:
+		break;
+	case S:
+		break;
+	case SE:
+		break;
+	case E:
+		break;
+	case NE:
+		break;
+	case N:
+		break;
+	default:
+		ledDisplay.setPWM[direction] = ledDisplay.power;
+		break;
+	}
+}
+
+8. sendBitBang() function:
+// sendBitBang() - SPI method that is used to bit bang 8 bits at a time to send data to the display screen
+void sendBitBang(char dataToSend) {
+	P1OUT &= ~SCLK; // drive clock low
+	_delay_cycles(1); // speed on MSP430 is much faster than the chip enable set up
+	// time and hold time - not really needed
+
+	// send data bit by bit
+	for (i = 0; i < 8; i++) {
+		// compare most significant bit of sentdata
+		if (dataToSend & 0x80) { // look at the most significant bit in our "dataToSend" variable
+			P1OUT |= SIN; // set value in MOSI to be transferred to 1
+		} else {
+			P1OUT &= ~SIN; // otherwise set value in MOSI to be transferred to 0
+		}
+
+		dataToSend <<= 1; // shift the bit over one place to the left to allow space for next bit of data
+		_delay_cycles(1);
+		P1OUT |= SCLK; // set the clock high
+		_delay_cycles(1);
+		P1OUT &= ~SCLK; // set the clock low
+		_delay_cycles(1);
+	}
+
+	// toggle the LATCH
+	P2OUT |= LATCH; // set the latch to enable
+	P2OUT &= ~LATCH; // set the latch to disable
+}
+
+9. Add to intializing pins method:
+	// SPI INITIALIZATION
+	P1DIR |= SCLK + SIN + BLANK;
+	P2DIR |= LATCH;
+	
+	BlankLow();
+	
+10. Add to initiliaze Timer method:
+// InitTimerSystem() - initializes timer system
+void InitTimerSystem() {
+	TACCR0 = Frequency; // sets the TACCR0 value to Frequency for ISR
+	TACCTL0 = CCIE; // sets the capture/compare control register to enable interrupts
+	TACTL = TASSEL_2 | ID_0 | TACLR | MC_1; // sets the timer to use SM clock, divided by 1, using clear mode, with up trigger
+
+	// calibration of clock to 8MHZ
+	DCOCTL = CALDCO_8MHZ;
+	BCSCTL1 = CALBC1_8MHZ;
+}
+
+12. Other methods to add:
+// Initialize LED values
+void InitLED(){
+	ledDisplay.LedStatus = 0x00; // initial status of LED is set to zero
+	ledDisplay.state = Startup; // Beginning state of LED
+	ledDisplay.Period = 50; // width of the pulse between each LED
+	
+	// didn't really know what to initialize the brightness to
+	ledDisplay.power = 100; // starting state has full brightness
+}
+
+// stop_watchdog() - stops the watchdog timer (for main method)
+void stop_watchdog() {
+	WDTCTL = WDTPW | WDTHOLD;
+}
+
+// BlankLow() -
+void BlankLow() {
+	P1OUT &= ~BLANK; // Blank is driven low
+}
