@@ -51,6 +51,16 @@ void fetch_ADC() {
 	__delay_cycles(2);
 }
 
+int fetch_Switch() {
+	ManageSoftwareTimers(g1mSTimeout);
+	g1mSTimeout = 0;
+	Debouncer(switches[0], timers[0]);
+	if(switches[0]->CurrentValidState == On){
+		return 1;
+	}else{
+		return 0;
+	}
+}
 void init_Timer(void) {
 
 	WDTCTL = WDTPW | WDTHOLD;	// Stop watchdog timer
@@ -75,7 +85,7 @@ void InitializeVariables(void) {
 
 int main(void) {
 
-//	init_ADC();
+	init_ADC();
 	init_Timer();
 	InitializeVariables();
 	InitPorts(switches[0]);
@@ -96,15 +106,15 @@ int main(void) {
 	 */
 
 	for (;;) {
-		//fetch_ADC();
-		ManageSoftwareTimers(g1mSTimeout);
-		g1mSTimeout = 0;
-		Debouncer(switches[0],timers[0]);
-
-		if (switches[0]->CurrentValidState == On) {
-		//	greenLED = HIGH;
+		confirm.state = no;
+		fetch_ADC(); //current values are in readings
+		if (fetch_Switch()) {
 			P1OUT ^= BIT6;
+			confirm.state = yes; //approve state changes
 		}
+
+
+
 	}
 }
 
